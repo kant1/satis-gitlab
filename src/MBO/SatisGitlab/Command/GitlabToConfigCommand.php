@@ -20,6 +20,8 @@ class GitlabToConfigCommand extends Command {
     const PER_PAGE = 50;
     const MAX_PAGES = 10000;
 
+    protected $groups = [];
+
     protected function configure() {
         $templatePath = realpath( dirname(__FILE__).'/../Resources/default-template.json' );
         
@@ -35,6 +37,8 @@ class GitlabToConfigCommand extends Command {
             
             // deep customization : template file extended with default configuration
             ->addOption('template', null, InputOption::VALUE_REQUIRED, 'template satis.json extended with gitlab repositories', $templatePath)
+            // filter by groups
+            ->addOption('groups', 'G', InputOption::VALUE_REQUIRED, 'GitLab Groups seperate by ","', null)
 
             // simple customization
             ->addOption('homepage', null, InputOption::VALUE_REQUIRED, 'satis homepage', 'http://localhost/satis/')
@@ -47,6 +51,13 @@ class GitlabToConfigCommand extends Command {
         ;
     }
 
+    protected function isFiltered(&$project) {
+        if (empty($this->groups) || !isset($project['namespace']['name'])) {
+            return false;
+        }
+        return !in_array($project['namespace']['name'], $this->groups);
+    }
+
     protected function execute(InputInterface $input, OutputInterface $output) {
         /*
          * parameters
@@ -54,6 +65,11 @@ class GitlabToConfigCommand extends Command {
         $gitlabUrl = $input->getArgument('gitlab-url');
         $gitlabAuthToken = $input->getArgument('gitlab-token');
         $outputFile = $input->getOption('output');
+
+        /*
+         * load groups
+         */
+        $this->groups = is_string($input->getOption('groups')) ? explode(',', $input->getOption('groups')) : [];
 
         /*
          * load template satis.json file
@@ -110,6 +126,9 @@ class GitlabToConfigCommand extends Command {
                 break;
             }
             foreach ($projects as $project) {
+                if ($this->isFiltered($project)){
+                    continue;
+                }
                 $projectUrl = $project['http_url_to_repo'];
                 try {
                     $json = $client->repositoryFiles()->getRawFile($project['id'], 'composer.json', $project['default_branch']);
